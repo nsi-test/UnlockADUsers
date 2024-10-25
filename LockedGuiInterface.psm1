@@ -4,6 +4,9 @@ class LockedGui {
 	
 	[System.Windows.Forms.Label] $UnlockLabel
 	
+	#FlowLayoutPanel for buttons to be in a row
+	[System.Windows.Forms.FlowLayoutPanel] $LButtonsPanel
+	
 	[System.Windows.Forms.Button] $RefreshButton
 	
 	[System.Windows.Forms.Button] $UnlockEnabledButton
@@ -18,7 +21,15 @@ class LockedGui {
 	
 	[System.Windows.Forms.ContextMenuStrip] $DgrContextMenuStrip
 	
-	[System.Windows.Forms.FlowLayoutPanel] $LFlowPanel
+	#FlowLayoutPanel for all controls (including $LButtonsPanel) to be in a grid for resize
+	[System.Windows.Forms.TableLayoutPanel] $LFlowPanel
+	
+	#custom values
+	[System.ComponentModel.ListSortDirection] $SortDirection
+	
+	[Int32] $LastSortedColumnIndex
+	
+	[System.Drawing.Size] $FormPreviousSize
 	
 	#functions given
 	[System.Management.Automation.PSMethod] $getlusers_fun
@@ -46,13 +57,15 @@ class LockedGui {
 		$this.LockedForm.AutoSizeMode = 'GrowAndShrink'
 		#/form
 	
-		#flowlayoutpanel
-		$this.LFlowPanel = [System.Windows.Forms.FlowLayoutPanel]::new()
-		$this.LFlowPanel.FlowDirection = [System.Windows.Forms.FlowDirection]::LeftToRight #default but here explicitly
+		#TableFlowLayoutPanel (contains all other controls)
+		$this.LFlowPanel = [System.Windows.Forms.TableLayoutPanel]::new()
+		#GrowStyle is AddRows by default (ours)
 		$this.LFlowPanel.Location = [System.Drawing.Point]::new(30,15)
-		$this.LFlowPanel.Size = [System.Drawing.Size]::new(455,580) #sic
+		$this.LFlowPanel.Size = [System.Drawing.Size]::new(455,595) #afterwards docked fill
+		#$this.LFlowPanel.BorderStyle = 'FixedSingle' #when we want to see the panel 
+		$this.LFlowPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
 		$this.LockedForm.Controls.Add($this.LFlowPanel)
-
+		#continuing with inner controls
 	
 		#label
 		$this.UnlockLabel = [System.Windows.Forms.Label]::new()
@@ -61,19 +74,26 @@ class LockedGui {
 		$this.UnlockLabel.Text += "`r`nUnlock marked users with right click and context menu click."
 
 		$this.UnlockLabel.Size = [System.Drawing.Size]::new(450,40) #40 (!)
-		#$this.UnlockLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left #for howto
+		#$this.UnlockLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left #left for howto
 
 		$this.LFlowPanel.Controls.Add($this.UnlockLabel)
 		#/label
 		
+		#LButtonsPanel (contains the buttons in a row)
+		$this.LButtonsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()	
+		$this.LButtonsPanel.Size = [System.Drawing.Size]::new(290,35) #(buttons width + 15 for distance and hight of a button +5)
+		$this.LFlowPanel.Controls.Add($this.LButtonsPanel)
+		Write-Verbose "buttons panel added"
+		#adding buttons below
+	
 	
 		#refresh button
 		$this.RefreshButton = [System.Windows.Forms.Button]::new()
 		$this.RefreshButton.Text = "Refresh"
 		$this.RefreshButton.Size = [System.Drawing.Size]::new(60,30)
+		#add click event handler
 		$this.RefreshButton.Add_Click({$thisGui.RefreshGrid()}.GetNewClosure()) #(!)
-		#$this.LFlowPanel.SetFlowBreak($this.RefreshButton, $true) #not for here, for howto
-		$this.LFlowPanel.Controls.Add($this.RefreshButton)
+		$this.LButtonsPanel.Controls.Add($this.RefreshButton)
 		Write-Verbose "refresh button added"
 		#/refresh button
 		
@@ -82,9 +102,9 @@ class LockedGui {
 		$this.UnlockEnabledButton = [System.Windows.Forms.Button]::new()
 		$this.UnlockEnabledButton.Text = "Unlock Enabled"
 		$this.UnlockEnabledButton.Size = [System.Drawing.Size]::new(100,30)
-		#add_click
+		#add click event handler
 		$this.UnlockEnabledButton.Add_Click({$thisGui.UnlockUsers($true, $false)}.GetNewClosure()) #(!) enabledonly, not selection
-		$this.LFlowPanel.Controls.Add($this.UnlockEnabledButton)
+		$this.LButtonsPanel.Controls.Add($this.UnlockEnabledButton)
 		Write-Verbose "unlock enabled button added"
 		#/unlock enabled button
 		
@@ -93,22 +113,27 @@ class LockedGui {
 		$this.UnlockAllButton = [System.Windows.Forms.Button]::new()
 		$this.UnlockAllButton.Text = "Unlock All"
 		$this.UnlockAllButton.Size = [System.Drawing.Size]::new(100,30)
-		#add_click
+		#add click event handler
 		$this.UnlockAllButton.Add_Click({$thisGui.UnlockUsers($false, $false)}.GetNewClosure()) #(!) enabled all (not only), not selection
-		$this.LFlowPanel.Controls.Add($this.UnlockAllButton)
+		$this.LButtonsPanel.Controls.Add($this.UnlockAllButton)
 		Write-Verbose "unlockall button added"
 		#/unlock all Button	
+		
+		#adding the LButtonsPanel to the big LFlowPanel
+		$this.LFlowPanel.Controls.Add($this.LButtonsPanel)
 
 		
 		#datagridview
 		$this.DataGridView = [System.Windows.Forms.DataGridView]::new()
-		$this.DataGridView.AutoSizeColumnsMode = 'AllCells'
-		$this.DataGridView.Size = [System.Drawing.Size]::new(450,500)
-		$this.DataGridView.Location = [System.Drawing.Point]::new(30,90)
+		$this.DataGridView.Size = [System.Drawing.Size]::new(500,500) #form width
 		$this.DataGridView.SelectionMode = 'FullRowSelect'
 		$this.DataGridView.MultiSelect = $true
 		$this.DataGridView.ReadOnly = $true
 		$this.DataGridView.DataBindings.DefaultDataSourceUpdateMode = 'OnValidation' #?
+		$this.DataGridView.AllowUserToAddRows = $false
+		$this.DataGridView.ScrollBars = [System.Windows.Forms.ScrollBars]::Both #default but must
+		$this.DataGridView.AutoSizeColumnsMode = [System.Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill #before the resize event
+		$this.DataGridView.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Bottom #without right for correct resizing
 		
 		#context menu
 		$this.DgrContextMenuStrip = [System.Windows.Forms.ContextMenuStrip]::new()
@@ -116,10 +141,19 @@ class LockedGui {
 		$this.DataGridView.ContextMenuStrip = $this.DgrContextMenuStrip
 		#/context menu
 	
-		#double click
-		$this.DataGridView.Add_DoubleClick({$thisGui.UnlockUsers($false, $true)}.GetNewClosure()) #(!) enabled all (not only), selection
-		#/doubleclick
-
+		#add cell double click event handler 
+		$this.DataGridView.Add_CellDoubleClick({$thisGui.DGridCellDoubleClick($thisGui.DataGridView, $args)}.GetNewClosure())
+		#/add cell doubleclick
+		
+		#add column header click event handler
+		$this.DataGridView.Add_ColumnHeaderMouseClick({$thisGui.SortColumnOnHeaderClick($thisGui.DataGridView, $args)}.GetNewClosure())
+		#/column header click
+				
+		#add resize event handler
+		$this.LockedForm.Add_Resize({$thisGui.FormResize($thisGui.LockedForm, $args)}.GetNewClosure())
+		#/add resize		
+		
+		#ading datagridview to the big LFlowPanel
 		$this.LFlowPanel.Controls.Add($this.DataGridView)
 		#/datagridview
 	
@@ -132,6 +166,7 @@ class LockedGui {
 		$this.StatusStrip.Enabled = $true
 		$this.StatusStrip.Dock = [System.Windows.Forms.DockStyle]::Bottom
 		$this.StatusStrip.LayoutStyle = [System.Windows.Forms.ToolStripLayoutStyle]::Table
+		#/status strip
 		
 		#striplabel
 		$this.Operation = [System.Windows.Forms.ToolStripLabel]::new()
@@ -141,8 +176,10 @@ class LockedGui {
 		$this.Operation.Visible = $true
 		#/striplabel
 		
+		#adding operation to status strip
 		$this.StatusStrip.Items.AddRange([System.Windows.Forms.ToolStripItem[]]@($this.Operation))
 		
+		#adding status strip to the form 
 		$this.LockedForm.Controls.Add($this.StatusStrip)
 		
 		$this.StatusStrip.Items[0].Text = "status" #not really used
@@ -153,6 +190,13 @@ class LockedGui {
 		$this.getlusers_fun = $null #at first
 		
 		$this.unlocklusers_fun = $null # at first
+		
+		#custom values
+		$this.SortDirection = [System.ComponentModel.ListSortDirection]::Ascending #just to initialize
+		
+		$this.LastSortedColumnIndex = -1 # at first
+		
+		$this.FormPreviousSize = $this.LockedForm.ClientSize #resize initialize
 		
 	} #constructor
 	
@@ -172,6 +216,7 @@ class LockedGui {
 	    $this.Operation.Text = "refreshing..."
 	    $this.LockedForm.Refresh()
 		$lusers_list = @($this.getlusers_fun.Invoke())
+		#$lusers_list *= 30 #low users test only
 		if ($lusers_list) {Write-Verbose "type of lusers list is: $($lusers_list.gettype())";}
 		if ($lusers_list) {
 	        Write-Verbose "lusers_list count: $($lusers_list.count)"
@@ -184,14 +229,35 @@ class LockedGui {
 		$this.Operation.Text += "$(' '*60)last refreshed: $([DateTime]::Now.ToString())" #65 is the margin for one char locked, here - 5 left
 		#this kind of control doesn't support non printing chars (tab)	
 		$this.LockedForm.Refresh()
-		$GridData = [System.Collections.ArrayList]::new()
-	    $GridData.AddRange(@($lusers_list))
-	    $this.DataGridView.DataSource = $GridData
+		
+		#DataTable
+		#datatable columns name filling
+ 		[System.Data.DataTable] $dataTable = 'GridData'
+		foreach ($column in $lusers_list[0].psobject.properties.name) {
+			[void] $dataTable.Columns.Add($column)
+		}
+		
+		#datatable filling rows
+		foreach ($item in $lusers_list) {
+			$row = $dataTable.NewRow()
+			foreach ($property in $dataTable.columns.columnName) {
+				$row.$property = $item.$property
+			}
+			[void] $dataTable.Rows.Add($row)
+		}
+		
+		#datagrid datasource is datatable
+		$this.DataGridView.DataSource = $dataTable
+		
+		#/Datatable
+		
+		
 		$this.LockedForm.Refresh()
 
 		Write-Verbose "After refresh in refreshgrid"
 	} #RefreshGrid fn
 	
+	#message form
 	[System.Windows.Forms.Form] CreateMsgForm([string] $message, [int] $unlnum){
 		#
 		Write-Verbose "messsage in the message fn: $message"
@@ -242,7 +308,7 @@ class LockedGui {
 		
 	    If ($selection) {
 	        Write-Verbose "selection option case chosen"
-	        $this.DataGridView.SelectedRows | % {$UserData += $this.DataGridView.DataSource[$_.Index];}
+			$this.DataGridView.SelectedRows | % {$UserData += $this.DataGridView.DataSource.Rows[$_.Index];}
 	    }
 	    else {
 	        $UserData = $this.DataGridView.DataSource
@@ -265,10 +331,129 @@ class LockedGui {
 		
 	} #UnlockUsers fn
 	
+	
+	#SortColumnOnHeaderClick column header click event handler
+	[Void] SortColumnOnHeaderClick($sender, $eventargs) {
+		Write-Verbose "*** entered in SortColumnOnHeaderClick function ***"
+		Write-Verbose "Column Header Clicked: $($eventArgs.ColumnIndex)"
+
+		Write-Verbose "Column index to sort is $($eventArgs.ColumnIndex)"
+		Write-Verbose "Last sorted column index was $($this.LastSortedColumnIndex)"
 		
+		If (($this.LastSortedColumnIndex -ge 0) -and ($eventArgs.ColumnIndex -eq $this.LastSortedColumnIndex)) { #here column is the same - the last one clicked
+			Write-Verbose "(sort column) In If, before switching"
+			$this.SortDirection = If ($this.SortDirection -eq [System.ComponentModel.ListSortDirection]::Ascending) {[System.ComponentModel.ListSortDirection]::Descending} Else {[System.ComponentModel.ListSortDirection]::Ascending}
+		} Else {
+			Write-Verbose "(sort column) In Else, before Ascending"
+			$this.SortDirection = [System.ComponentModel.ListSortDirection]::Ascending
+		}
+		
+		Write-Verbose "Direction to sort the column now is $($this.SortDirection)"
+		$this.DataGridView.Sort($this.DataGridView.Columns[$eventArgs.ColumnIndex], $this.SortDirection)
+		$this.LastSortedColumnIndex = $eventArgs.ColumnIndex #save the last sorted column
+		Write-Verbose "End of SortColumnOnHeaderClick"
+		Write-Verbose "***************************************"
+	}
+	#/SortColumnOnHeaderClick
+	
+	#DGridCellDoubleClick cell double click event handler
+	[Void] DGridCellDoubleClick($sender, $eventargs) {
+		Write-Verbose "*** entered in DGridCellDoubleClick function ***"
+		Write-Verbose "sender: $($sender)"
+		Write-Verbose "eventargs: $($eventargs)"
+		Write-Verbose "eventargs[1].RowIndex: $($eventargs[1].RowIndex)"
+		Write-Verbose "eventargs[1] properties: $($eventargs[1].GetType().GetProperties())"
+		#first is the sender, second ([1]) is eventargs
+		If ($eventargs[1].RowIndex -lt 0) {return} #header is -1
+		$this.UnlockUsers($false, $true) #(!) enabled all (not only), selection
+		Write-Verbose "End of DGridCellDoubleClick"
+		Write-Verbose "***************************************"
+	}
+	#/DGridCellDoubleClick
+	
+	
+	#FormResize resize event handler
+	[Void] FormResize([System.Windows.Forms.Control] $sender, $eventargs) {
+		Write-Verbose "*** entered in FormResizeDataGridView function ***"
+		Write-Verbose "sender: $($sender)"
+		#$FormControl = [System.Windows.Forms.Form] $sender #cast is not necessary, $sender is the form
+		$FormControl = $sender #the name is clearer
+		Write-Verbose "eventargs: $($eventargs)"
+		
+		$FormNewSize = $FormControl.ClientSize
+		
+		Write-Verbose "Previous Form size: Width = $($this.FormPreviousSize.Width), Height = $($this.FormPreviousSize.Height)"
+		Write-Verbose "New Form size: Width = $($FormNewSize.Width), Height = $($FormNewSize.Height)"
+		
+		#coeficients
+		$coefficientHeight = $coefficientWidth = 1
+		
+		if ($this.FormPreviousSize.Height -ne 0) {
+			[double] $coefficientHeight = $FormNewSize.Height / $this.FormPreviousSize.Height
+		}
+		if ($this.FormPreviousSize.Width -ne 0) {
+			[double] $coefficientWidth = $FormNewSize.Width / $this.FormPreviousSize.Width
+		}
+		
+		Write-Verbose "coefficientHeight: $($coefficientHeight)"
+		Write-Verbose "coefficientWidth: $($coefficientWidth)"
+		
+		#TableLayoutPanel resize is not necessary because it is docked to the form
+		<#
+		$FPWidth = [int32] ($this.LFlowPanel.Size.Width * $coefficientWidth)
+		$FPHeight = [int32] ($this.LFlowPanel.Size.Height * $coefficientHeight)
+		$this.LFlowPanel.Size = [System.Drawing.Size]::new($FPWidth, $FPHeight)
+		Write-Verbose "LFlowPanel new height: $($this.LFlowPanel.Size.Height)"
+		Write-Verbose "LFlowPanel new width: $($this.LFlowPanel.Size.Width)"
+		#>
+
+		#DataGridView resize. It is resized by the form coeficients
+		$DGWidth = [int32] ($this.DataGridView.Size.Width * $coefficientWidth)		
+		$DGHeight = [int32] ($this.DataGridView.Size.Height * $coefficientHeight)
+				
+		$this.DataGridView.Size = [System.Drawing.Size]::new($DGWidth, $DGHeight)
+		
+		Write-Verbose "datagridview new height: $($this.DataGridView.Size.Height)"
+		Write-Verbose "datagridview new width: $($this.DataGridView.Size.Width)"
+		
+		$this.FormPreviousSize = $FormNewSize
+		
+		#columns stretch and scrollbar
+		#cgpt advice (little cgpt prompting...)
+		$totalContentWidth = 0
+		foreach ($column in $this.DataGridView.Columns) {
+			# Calculate the minimum required width based on the content in each column
+			$totalContentWidth += $column.GetPreferredWidth([System.Windows.Forms.DataGridViewAutoSizeColumnMode]::AllCells, $true)
+		}
+		$totalContentWidth += $this.DataGridView.RowHeadersWidth #+ the empty first column (41 px)
+		#Write-Verbose "RowHeadersWidth: $($this.DataGridView.RowHeadersWidth)"
+
+		Write-Verbose "totalContentWidth: $($totalContentWidth)"
+		Write-Verbose "DataGridView.ClientSize.Width: $($this.DataGridView.ClientSize.Width)"
+
+		# If the total content width is greater than the DataGridView width, show the scrollbar
+		if ($totalContentWidth -gt $this.DataGridView.ClientSize.Width) {
+			$this.DataGridView.AutoSizeColumnsMode = 'None'  # Disable Fill temporarily to show the scrollbar
+			Write-Verbose "in IF (totalContentWidth > DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
+			foreach ($column in $this.DataGridView.Columns) {
+				$column.Width = $column.GetPreferredWidth([System.Windows.Forms.DataGridViewAutoSizeColumnMode]::AllCells, $true)
+			} #foreach
+		} else {
+			$this.DataGridView.AutoSizeColumnsMode = 'Fill'  # Re-enable Fill when there's enough space
+			Write-Verbose "in ELSE (totalContentWidth < DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
+		} #if else
+		
+		
+		#/cgpt advice
+		
+		
+	}
+	#/FormResize
+	
+	
 	[void] Show() {
 			[void]$this.LockedForm.ShowDialog()
-	} #RefreshGrid fn
+	} #Show fn
 	
 	
 	

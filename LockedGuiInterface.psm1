@@ -83,7 +83,7 @@ class LockedGui {
 		$this.LButtonsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()	
 		$this.LButtonsPanel.Size = [System.Drawing.Size]::new(290,35) #(buttons width + 15 for distance and hight of a button +5)
 		$this.LFlowPanel.Controls.Add($this.LButtonsPanel)
-		Write-Verbose "buttons panel added"
+		Write-Verbose "$(date) buttons panel added"
 		#adding buttons below
 	
 	
@@ -94,7 +94,7 @@ class LockedGui {
 		#add click event handler
 		$this.RefreshButton.Add_Click({$thisGui.RefreshGrid()}.GetNewClosure()) #(!)
 		$this.LButtonsPanel.Controls.Add($this.RefreshButton)
-		Write-Verbose "refresh button added"
+		Write-Verbose "$(date) refresh button added"
 		#/refresh button
 		
 				
@@ -105,7 +105,7 @@ class LockedGui {
 		#add click event handler
 		$this.UnlockEnabledButton.Add_Click({$thisGui.UnlockUsers($true, $false)}.GetNewClosure()) #(!) enabledonly, not selection
 		$this.LButtonsPanel.Controls.Add($this.UnlockEnabledButton)
-		Write-Verbose "unlock enabled button added"
+		Write-Verbose "$(date) unlock enabled button added"
 		#/unlock enabled button
 		
 			
@@ -116,7 +116,7 @@ class LockedGui {
 		#add click event handler
 		$this.UnlockAllButton.Add_Click({$thisGui.UnlockUsers($false, $false)}.GetNewClosure()) #(!) enabled all (not only), not selection
 		$this.LButtonsPanel.Controls.Add($this.UnlockAllButton)
-		Write-Verbose "unlockall button added"
+		Write-Verbose "$(date) unlockall button added"
 		#/unlock all Button	
 		
 		#adding the LButtonsPanel to the big LFlowPanel
@@ -201,7 +201,7 @@ class LockedGui {
 	} #constructor
 	
 	[System.Drawing.Icon] LoadIcon($GetB64) {
-		Write-Verbose "load icon func"
+		Write-Verbose "$(date) load icon func"
 		#Write-Verbose $(&$GetB64)
 		return [System.Drawing.Icon][IO.MemoryStream][Convert]::FromBase64String($(&$GetB64))
 		}
@@ -212,18 +212,18 @@ class LockedGui {
 	}
 	
 	[void] RefreshGrid() {
-		Write-Verbose "Start of refreshgrid..."
+		Write-Verbose "$(date) Start of refreshgrid..."
 	    $this.Operation.Text = "refreshing..."
 	    $this.LockedForm.Refresh()
 		$lusers_list = @($this.getlusers_fun.Invoke())
 		#$lusers_list *= 30 #low users test only
-		if ($lusers_list) {Write-Verbose "type of lusers list is: $($lusers_list.gettype())";}
+		if ($lusers_list) {Write-Verbose "$(date) type of lusers list is: $($lusers_list.gettype())";}
 		if ($lusers_list) {
-	        Write-Verbose "lusers_list count: $($lusers_list.count)"
+	        Write-Verbose "$(date) lusers_list count: $($lusers_list.count)"
 	        $this.Operation.Text = "locked users count: $($lusers_list.count)"
 	    }
 		else {
-			Write-Verbose "empty list"
+			Write-Verbose "$(date) empty list"
 			$this.Operation.Text = "no locked users"
 	    }
 		$this.Operation.Text += "$(' '*60)last refreshed: $([DateTime]::Now.ToString())" #65 is the margin for one char locked, here - 5 left
@@ -254,14 +254,14 @@ class LockedGui {
 		
 		$this.LockedForm.Refresh()
 
-		Write-Verbose "After refresh in refreshgrid"
+		Write-Verbose "$(date) After refresh in refreshgrid"
 	} #RefreshGrid fn
 	
 	#message form
 	[System.Windows.Forms.Form] CreateMsgForm([string] $message, [int] $unlnum){
 		#
-		Write-Verbose "messsage in the message fn: $message"
-		Write-Verbose "unlocked nuber in the message fn: $unlnum"
+		Write-Verbose "$(date) messsage in the message fn: $message"
+		Write-Verbose "$(date) unlocked nuber in the message fn: $unlnum"
 	    $MsgForm = [System.Windows.Forms.Form]::new()
 		$MsgForm.Owner = $this.LockedForm #(!)
 		#icon
@@ -283,7 +283,7 @@ class LockedGui {
 		$MsgText.Size = [System.Drawing.Size]::new(425,300) # -25 for scroll bar
 	    $MsgText.Text = $message
 	    $MsgForm.controls.Add($MsgText)
-	    #Write-Verbose "LABEL: $MsgText"
+	    #Write-Verbose "$(date) LABEL: $MsgText"
 	    $OKButton = [System.Windows.Forms.Button]::new()
 	    $OKButton.Text = "OK"
 	    $OKButton.Size = [System.Drawing.Size]::new(60,30)
@@ -296,34 +296,34 @@ class LockedGui {
 	
 	[void] UnlockUsers([bool] $enabledonly, [bool] $selection) {
 		#
-		Write-Verbose "start of UnlockUsers fn"
-		Write-Verbose "enabled only has value $enabledonly"
-		Write-Verbose "selection has value $selection"
+		Write-Verbose "$(date) start of UnlockUsers fn"
+		Write-Verbose "$(date) enabled only has value $enabledonly"
+		Write-Verbose "$(date) selection has value $selection"
 		$this.DataGridView.SelectedRows | % {Write-Verbose "Index of selected: $($_.Index)"}
-		Write-Verbose "$($this.DataGridView.SelectedRows)"
+		Write-Verbose "$(date) $($this.DataGridView.SelectedRows)"
 	    #Write-Verbose $DataGridView.DataSource
 		
 		
 		$UserData = @()
 		
 	    If ($selection) {
-	        Write-Verbose "selection option case chosen"
+	        Write-Verbose "$(date) selection option case chosen"
 			$this.DataGridView.SelectedRows | % {$UserData += $this.DataGridView.DataSource.Rows[$_.Index];}
 	    }
 	    else {
 	        $UserData = $this.DataGridView.DataSource
 	    }
 		
-	    Write-Verbose "userdata is: $($UserData)"
+	    Write-Verbose "$(date) userdata is: $($UserData)"
 		
 		$unlock_result = $this.unlocklusers_fun.Invoke($UserData, $enabledonly) #$enabledonly is the parameter
 		
-		Write-Verbose "after unlock (enabledonly is $enabledonly) pressed"
+		Write-Verbose "$(date) after unlock (enabledonly is $enabledonly) pressed"
 		$this.RefreshGrid()
-		Write-Verbose "after refreshing in unlock (enabledonly is $enabledonly) block"
+		Write-Verbose "$(date) after refreshing in unlock (enabledonly is $enabledonly) block"
 		
-		Write-Verbose "Unlocking result: $($unlock_result["unlockednum"]) unlocked users"
-		Write-Verbose "message to sent to msLFlowPanel: $($unlock_result["message"])"
+		Write-Verbose "$(date) Unlocking result: $($unlock_result["unlockednum"]) unlocked users"
+		Write-Verbose "$(date) message to sent to msLFlowPanel: $($unlock_result["message"])"
 		#[System.Windows.Forms.MessageBox]::Show($message) #just to remember how messagebox is called
 		
 		$msLFlowPanel = $this.CreateMsgForm($unlock_result["message"], $unlock_result["unlockednum"])
@@ -334,69 +334,69 @@ class LockedGui {
 	
 	#SortColumnOnHeaderClick column header click event handler
 	[Void] SortColumnOnHeaderClick($sender, $eventargs) {
-		Write-Verbose "*** entered in SortColumnOnHeaderClick function ***"
-		Write-Verbose "Column Header Clicked: $($eventArgs.ColumnIndex)"
+		Write-Verbose "$(date) *** entered in SortColumnOnHeaderClick function ***"
+		Write-Verbose "$(date) Column Header Clicked: $($eventArgs.ColumnIndex)"
 
-		Write-Verbose "Column index to sort is $($eventArgs.ColumnIndex)"
-		Write-Verbose "Last sorted column index was $($this.LastSortedColumnIndex)"
+		Write-Verbose "$(date) Column index to sort is $($eventArgs.ColumnIndex)"
+		Write-Verbose "$(date) Last sorted column index was $($this.LastSortedColumnIndex)"
 		
 		If (($this.LastSortedColumnIndex -ge 0) -and ($eventArgs.ColumnIndex -eq $this.LastSortedColumnIndex)) { #here column is the same - the last one clicked
-			Write-Verbose "(sort column) In If, before switching"
+			Write-Verbose "$(date) (sort column) In If, before switching"
 			$this.SortDirection = If ($this.SortDirection -eq [System.ComponentModel.ListSortDirection]::Ascending) {[System.ComponentModel.ListSortDirection]::Descending} Else {[System.ComponentModel.ListSortDirection]::Ascending}
 		} Else {
-			Write-Verbose "(sort column) In Else, before Ascending"
+			Write-Verbose "$(date) (sort column) In Else, before Ascending"
 			$this.SortDirection = [System.ComponentModel.ListSortDirection]::Ascending
 		}
 		
-		Write-Verbose "Direction to sort the column now is $($this.SortDirection)"
+		Write-Verbose "$(date) Direction to sort the column now is $($this.SortDirection)"
 		$this.DataGridView.Sort($this.DataGridView.Columns[$eventArgs.ColumnIndex], $this.SortDirection)
 		$this.LastSortedColumnIndex = $eventArgs.ColumnIndex #save the last sorted column
-		Write-Verbose "End of SortColumnOnHeaderClick"
-		Write-Verbose "***************************************"
+		Write-Verbose "$(date) End of SortColumnOnHeaderClick"
+		Write-Verbose "$(date) ***************************************"
 	}
 	#/SortColumnOnHeaderClick
 	
 	#DGridCellDoubleClick cell double click event handler
 	[Void] DGridCellDoubleClick($sender, $eventargs) {
-		Write-Verbose "*** entered in DGridCellDoubleClick function ***"
-		Write-Verbose "sender: $($sender)"
-		Write-Verbose "eventargs: $($eventargs)"
-		Write-Verbose "eventargs[1].RowIndex: $($eventargs[1].RowIndex)"
-		Write-Verbose "eventargs[1] properties: $($eventargs[1].GetType().GetProperties())"
+		Write-Verbose "***$(date) entered in DGridCellDoubleClick function ***"
+		Write-Verbose "$(date) sender: $($sender)"
+		Write-Verbose "$(date) eventargs: $($eventargs)"
+		Write-Verbose "$(date) eventargs[1].RowIndex: $($eventargs[1].RowIndex)"
+		Write-Verbose "$(date) eventargs[1] properties: $($eventargs[1].GetType().GetProperties())"
 		#first is the sender, second ([1]) is eventargs
 		If ($eventargs[1].RowIndex -lt 0) {return} #header is -1
 		$this.UnlockUsers($false, $true) #(!) enabled all (not only), selection
-		Write-Verbose "End of DGridCellDoubleClick"
-		Write-Verbose "***************************************"
+		Write-Verbose "$(date) End of DGridCellDoubleClick"
+		Write-Verbose "$(date) ***************************************"
 	}
 	#/DGridCellDoubleClick
 	
 	
 	#FormResize resize event handler
 	[Void] FormResize([System.Windows.Forms.Control] $sender, $eventargs) {
-		Write-Verbose "*** entered in FormResizeDataGridView function ***"
-		Write-Verbose "sender: $($sender)"
+		Write-Verbose "$(date) *** ENTERED in FormResizeDataGridView function ***"
+		Write-Verbose "$(date) sender: $($sender)"
 		#$FormControl = [System.Windows.Forms.Form] $sender #cast is not necessary, $sender is the form
 		$FormControl = $sender #the name is clearer
-		Write-Verbose "eventargs: $($eventargs)"
+		Write-Verbose "$(date) eventargs: $($eventargs)"
 		
 		$FormNewSize = $FormControl.ClientSize
 		
-		Write-Verbose "Previous Form size: Width = $($this.FormPreviousSize.Width), Height = $($this.FormPreviousSize.Height)"
-		Write-Verbose "New Form size: Width = $($FormNewSize.Width), Height = $($FormNewSize.Height)"
+		Write-Verbose "$(date) Previous Form size: Width = $($this.FormPreviousSize.Width), Height = $($this.FormPreviousSize.Height)"
+		Write-Verbose "$(date) New Form size: Width = $($FormNewSize.Width), Height = $($FormNewSize.Height)"
 		
 		#coeficients
 		$coefficientHeight = $coefficientWidth = 1
 		
-		if ($this.FormPreviousSize.Height -ne 0) {
+		if (($this.FormPreviousSize.Height -ne 0) -and ($FormNewSize.Height -ne 0)) {
 			[double] $coefficientHeight = $FormNewSize.Height / $this.FormPreviousSize.Height
 		}
-		if ($this.FormPreviousSize.Width -ne 0) {
+		if (($this.FormPreviousSize.Width -ne 0) -and ($FormNewSize.Width -ne 0)) {
 			[double] $coefficientWidth = $FormNewSize.Width / $this.FormPreviousSize.Width
 		}
 		
-		Write-Verbose "coefficientHeight: $($coefficientHeight)"
-		Write-Verbose "coefficientWidth: $($coefficientWidth)"
+		Write-Verbose "$(date) coefficientHeight: $($coefficientHeight)"
+		Write-Verbose "$(date) coefficientWidth: $($coefficientWidth)"
 		
 		#TableLayoutPanel resize is not necessary because it is docked to the form
 		<#
@@ -407,14 +407,17 @@ class LockedGui {
 		Write-Verbose "LFlowPanel new width: $($this.LFlowPanel.Size.Width)"
 		#>
 
+		Write-Verbose "$(date) datagridview height before resize: $($this.DataGridView.Size.Height)"
+		Write-Verbose "$(date) datagridview width before resize: $($this.DataGridView.Size.Width)"
+		
 		#DataGridView resize. It is resized by the form coeficients
 		$DGWidth = [int32] ($this.DataGridView.Size.Width * $coefficientWidth)		
 		$DGHeight = [int32] ($this.DataGridView.Size.Height * $coefficientHeight)
 				
 		$this.DataGridView.Size = [System.Drawing.Size]::new($DGWidth, $DGHeight)
 		
-		Write-Verbose "datagridview new height: $($this.DataGridView.Size.Height)"
-		Write-Verbose "datagridview new width: $($this.DataGridView.Size.Width)"
+		Write-Verbose "$(date) datagridview new height: $($this.DataGridView.Size.Height)"
+		Write-Verbose "$(date) datagridview new width: $($this.DataGridView.Size.Width)"
 		
 		$this.FormPreviousSize = $FormNewSize
 		
@@ -428,24 +431,25 @@ class LockedGui {
 		$totalContentWidth += $this.DataGridView.RowHeadersWidth #+ the empty first column (41 px)
 		#Write-Verbose "RowHeadersWidth: $($this.DataGridView.RowHeadersWidth)"
 
-		Write-Verbose "totalContentWidth: $($totalContentWidth)"
-		Write-Verbose "DataGridView.ClientSize.Width: $($this.DataGridView.ClientSize.Width)"
+		Write-Verbose "$(date) totalContentWidth: $($totalContentWidth)"
+		Write-Verbose "$(date) DataGridView.ClientSize.Width: $($this.DataGridView.ClientSize.Width)"
 
 		# If the total content width is greater than the DataGridView width, show the scrollbar
 		if ($totalContentWidth -gt $this.DataGridView.ClientSize.Width) {
 			$this.DataGridView.AutoSizeColumnsMode = 'None'  # Disable Fill temporarily to show the scrollbar
-			Write-Verbose "in IF (totalContentWidth > DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
+			Write-Verbose "$(date) in IF (totalContentWidth > DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
 			foreach ($column in $this.DataGridView.Columns) {
 				$column.Width = $column.GetPreferredWidth([System.Windows.Forms.DataGridViewAutoSizeColumnMode]::AllCells, $true)
 			} #foreach
 		} else {
 			$this.DataGridView.AutoSizeColumnsMode = 'Fill'  # Re-enable Fill when there's enough space
-			Write-Verbose "in ELSE (totalContentWidth < DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
+			Write-Verbose "$(date) in ELSE (totalContentWidth < DataGridView.ClientSize.Width) DataGridView.AutoSizeColumnsMode: $($this.DataGridView.AutoSizeColumnsMode)"
 		} #if else
 		
 		
 		#/cgpt advice
 		
+		Write-Verbose "$(date) *** END of FormResizeDataGridView function ***"
 		
 	}
 	#/FormResize

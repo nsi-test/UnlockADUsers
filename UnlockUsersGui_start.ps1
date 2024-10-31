@@ -6,7 +6,7 @@ using module ".\UnlockUsers_classes.psm1" #classes
 
 #$VerbosePreference = "Continue" #uncomment for verbose (in fact works only outside)
 
-Set-Variable -Name ULVersion -Value "1.4.0" -Option ReadOnly -Force -Scope global
+Set-Variable -Name ULVersion -Value "1.4.1" -Option ReadOnly -Force -Scope global
 
 Write-Verbose "UL Version is: $global:ULVersion"
 

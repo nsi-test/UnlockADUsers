@@ -100,7 +100,8 @@ class UsersUnlocker {
 		$unlockednum = 0
 		
 		$UserData | % {
-			if (! $_.enabled -and $enabledonly) {
+			#Enabled attribute is actually a String and needs to be converted
+			if (-not ([bool]::Parse($_.Enabled)) -and $enabledonly) {
 				"$($_.username) is disabled - remains locked" | Tee-Object -variable msg | Write-Verbose
 				Write-Verbose "in if enabled, user: $($_.username)"
 

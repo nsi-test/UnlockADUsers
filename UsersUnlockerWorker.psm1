@@ -1,3 +1,5 @@
+using module ".\LockedADUCallerFinder.psm1" #tasks and lock caller info
+
 class UsersUnlocker {
 	
 	[System.Object] $liface #this is the interface object member which is given in the constructor, it can be gui, cmdline, or whatever
@@ -5,6 +7,10 @@ class UsersUnlocker {
 	[Bool] $LUsersAreChanged #property signifying that results has been changed since the last operation
 	
 	[System.Object[]] $PreviousLUsers # an array with the previous state of the locked users data
+
+	[LockedADUCallerFinder] $CallerFinder #object to find the caller
+
+	[Bool] $ShowLCaller #property signifying that the caller computer should be searched and shown
 	
 	#constructor
 	UsersUnlocker([System.Object] $liface) { #the exact type is not known here
@@ -14,6 +20,7 @@ class UsersUnlocker {
 				'GetLUsers'=$this.GetLUsers
 				'UnlockLUsers'=$this.UnlockLUsers
 				'GetLUsersAreChanged'=$this.GetLUsersAreChanged
+				'SetShowLCaller'=$this.SetShowLCaller
 				}	
 
 		#this.liface accepts the fubctions object... (the two liface are the same in fact...)
@@ -24,18 +31,36 @@ class UsersUnlocker {
 		$this.LUsersAreChanged = $false #at first - no differences
 
 		$this.PreviousLUsers = @() #the data object transferred is array
+
+		#the lock CallerFinder object
+		$this.CallerFinder = [LockedADUCallerFinder]::new()
+
+		$this.ShowLCaller = $true #at first
 		
 	} #constructor
 
 	#getting and returning the locked users function
 	[System.Object[]] GetLUsers() {
-		Write-Verbose "`r`nStart of GetLUsers() - worker"
+		Write-Verbose "`r`n$(date) Start of GetLUsers() - worker"
+		try {
+            $DCs = Get-ADDomainController -Filter * | Select-Object -ExpandProperty HostName
+        }
+        catch {
+            $DCs = @()
+        }
+		Write-Verbose "$(date) in GetLUsers - DCs gotten are: $($DCs)"
+        $this.CallerFinder.SetDCs($DCs)
+		Write-Verbose "$(date) in getlusers DCs were set to CallerFinder"
+
 		$CurrentLUsers = @($(Get-ADUser -Filter * -Properties SamAccountname, badPwdCount, badPasswordTime, lockedout, enabled | Where-Object {$_.lockedout -eq "True"} | % {
-			New-Object PSObject -Property @{
-			username = $_.SamAccountname
-			badPwdCount = $_.badPwdCount
-			badPasswordTime = [DateTime]::FromFileTime($_.badPasswordTime)
-			enabled = $_.enabled
+			if ($this.ShowLCaller) {$CallerFinderResult = $this.CallerFinder.SearchUsers($_.SamAccountname, [DateTime]::FromFileTime($_.badPasswordTime))} #if it is set by GUI
+			[PSCustomObject] @{
+			    username = $_.SamAccountname
+			    badPwdCount = $_.badPwdCount
+			    badPasswordTime = [DateTime]::FromFileTime($_.badPasswordTime)
+			    enabled = $_.enabled
+				callerComputer = if ($CallerFinderResult) {$CallerFinderResult[0]} else {''}
+			    logSource = if ($CallerFinderResult) {$CallerFinderResult[1]} else {''}
 			}
 		} | Sort-Object -Property badPasswordTime)) #an array
 		
@@ -141,6 +166,11 @@ class UsersUnlocker {
 
 	#getter for LUsersAreChanged property
 	[Bool] GetLUsersAreChanged() {return $this.LUsersAreChanged}
+
+	#setter of ShowLCaller property
+	[void] SetShowLCaller($ShowLockCaller) {
+		$this.ShowLCaller = $ShowLockCaller
+	}
 
 
 	#function that "runs" the interface, which uses worker's functions. The interface must have a Show() method which is specific for every of them

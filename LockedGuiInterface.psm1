@@ -18,6 +18,8 @@ class LockedGui {
 	[System.Windows.Forms.Label] $AutoRSecondsLabel #describing the period textbox
 	
 	[System.Windows.Forms.TextBox] $SecondsText #textbox for changing refresh period	
+
+	[System.Windows.Forms.CheckBox] $ShowLCallerChBox #show lock caller checkbox
 	#/FlowLayoutPanel
 	
 	[System.Windows.Forms.DataGridView] $DataGridView
@@ -45,12 +47,18 @@ class LockedGui {
 	
 	[String] $DefaultLTimerPeriod #string, bacause it is for the textbox
 	
+    [String] $ShCallerLTimerPeriod #string, bacause it is for the textbox, for the case of information getting delay
+
+	[String] $NoShCallerLTimerPeriod #string, bacause it is for the textbox, for the case of information getting delay
+
 	#functions given from the worker
 	[System.Management.Automation.PSMethod] $getlusers_fun #function to get locked users
 	
 	[System.Management.Automation.PSMethod] $unlocklusers_fun #function to ulock users
 	
 	[System.Management.Automation.PSMethod] $getlusersarechanged_fun #function that shows that the state of locked users has been changed
+
+	[System.Management.Automation.PSMethod] $setshowlcaller_fun #function that sets the showing the lock caller or not
 	
 	#constructor
 	LockedGui() {
@@ -68,7 +76,7 @@ class LockedGui {
 		$this.LockedForm.StartPosition = 'CenterScreen'
 		$this.LockedForm.Text = "Unlocking users v$global:ULVersion" #version set in _start.ps1
 		$this.LockedForm.Text += " (running as: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name))"
-		$this.LockedForm.ClientSize = [System.Drawing.Size]::new(500,650)
+		$this.LockedForm.ClientSize = [System.Drawing.Size]::new(720,650)
 		$this.LockedForm.DataBindings.DefaultDataSourceUpdateMode = 'OnValidation' #0 ?
 		$this.LockedForm.AutoSizeMode = 'GrowAndShrink'
 		#/form
@@ -97,8 +105,8 @@ class LockedGui {
 		
 		#LButtonsPanel (contains the buttons in a row, autorefresh controls also)
 		$this.LButtonsPanel = [System.Windows.Forms.FlowLayoutPanel]::new()	
-		$this.LButtonsPanel.Size = [System.Drawing.Size]::new(495,40) #(almost the whole form width for the controls and height of a button +5 and more 5 px for three lines of the seconds label)
-		#$this.LButtonsPanel.BorderStyle = 'FixedSingle' #useful when we want to see the panel size and borders 
+		$this.LButtonsPanel.Size = [System.Drawing.Size]::new(715,40) #(almost the whole form width (-5) for the controls and height of a button +5 and more 5 px for three lines of the seconds label)
+		#$this.LButtonsPanel.BorderStyle = 'FixedSingle' #very useful when we want to see the panel size and borders
 		$this.LTablePanel.Controls.Add($this.LButtonsPanel)
 		Write-Verbose "$(date) buttons panel added to LTablePanel"
 		#adding buttons below
@@ -163,7 +171,11 @@ class LockedGui {
 		Write-Verbose "$(date) autorefresh seconds label added to LButtonsPanel"
 		#/autorefresh seconds label
 		
-		$this.DefaultLTimerPeriod = '60' #at first (now)
+		$this.ShCallerLTimerPeriod = '120' #at first (may be) 
+
+		$this.NoShCallerLTimerPeriod = '60' #at first (may be)
+
+		$this.DefaultLTimerPeriod = $this.ShCallerLTimerPeriod #at first (now)
 		
 		#autorefresh seconds textbox
 		$this.SecondsText = [System.Windows.Forms.TextBox]::new()
@@ -176,6 +188,18 @@ class LockedGui {
 		$this.LButtonsPanel.Controls.Add($this.SecondsText)
 		Write-Verbose "$(date) autorefresh seconds textbox added to LButtonsPanel"
 		#/autorefresh seconds textbox
+
+		#show lock caller checkbox
+		$this.ShowLCallerChBox = [System.Windows.Forms.CheckBox]::New()
+		$this.ShowLCallerChBox.Checked = $true
+		$this.ShowLCallerChBox.AutoSize = $true #necessary, and all bellow (10x cgpt)
+		$this.ShowLCallerChBox.CheckAlign = 'MiddleRight'
+		$this.ShowLCallerChBox.TextAlign = 'MiddleLeft'
+		$this.ShowLCallerChBox.Text = "Show Lock Caller"
+		$this.ShowLCallerChBox.Add_CheckedChanged({$thisGui.ShowLCallerChBoxCheckedChanged($thisGui.ShowLCallerChBox, $args)}.GetNewClosure())
+		$this.LButtonsPanel.Controls.Add($this.ShowLCallerChBox)
+		Write-Verbose "$(date) show lock caller checkbox added to LButtonsPanel"
+		#/show lock caller checkbox
 		
 		#adding LButtonsPanel to the big LTablePanel
 		$this.LTablePanel.Controls.Add($this.LButtonsPanel)
@@ -183,7 +207,8 @@ class LockedGui {
 		
 		#datagridview
 		$this.DataGridView = [System.Windows.Forms.DataGridView]::new()
-		$this.DataGridView.Size = [System.Drawing.Size]::new(500,500) #form width
+		#$this.DataGridView.Size = [System.Drawing.Size]::new(500,500) #form width
+		$this.DataGridView.Size = [System.Drawing.Size]::new(720,500) #form width
 		$this.DataGridView.SelectionMode = 'FullRowSelect'
 		$this.DataGridView.MultiSelect = $true
 		$this.DataGridView.ReadOnly = $true
@@ -268,6 +293,8 @@ class LockedGui {
 		$this.unlocklusers_fun = $null #at first
 		
 		$this.getlusersarechanged_fun = $null #at first 
+
+		$this.setshowlcaller_fun = $null #at first
 		
 		#custom values (LockedGui object)
 		$this.SortDirection = [System.ComponentModel.ListSortDirection]::Ascending #just to initialize
@@ -294,11 +321,13 @@ class LockedGui {
 		$this.getlusers_fun = $users_ulocker_funs.GetLUsers
 		$this.unlocklusers_fun = $users_ulocker_funs.UnlockLUsers
 		$this.getlusersarechanged_fun = $users_ulocker_funs.GetLUsersAreChanged
+		$this.setshowlcaller_fun = $users_ulocker_funs.SetShowLCaller
 	}
 	
 	#visual data refresher function; $EnforcedByUI is used when called from user interaction, otherwise - ordinary timer tick
 	[void] RefreshGrid($EnforcedByUI) {
 		Write-Verbose "`r`n$(date) *** Start of refreshgrid... ***"
+		$RefreshStartTime = $(Get-Date) #for measuring the refreshing duration
 		
 		#restarting timer if it is EnforcedByUI and the autorefresh checkbox is checked
 		Write-Verbose "$(date) chbox: $($this.AutoRefreshChBox.Checked)"
@@ -321,12 +350,15 @@ class LockedGui {
 			Write-Verbose "$(date) empty list"
 			$this.Operation.Text = "no locked users"
 	    }
-		$this.Operation.Text += "$(' '*60)last refreshed: $([DateTime]::Now.ToString())" #65 is the margin for one char locked, here - 5 left
+        $RefreshEndTime = $(Get-Date)
+		$duration_sec = [Math]::Ceiling($(New-TimeSpan -Start $RefreshStartTime -End $RefreshEndTime).TotalSeconds) # the seconds to the upper value duration measurement
+		$this.Operation.Text += "$(' '*115)last refreshed: $([DateTime]::Now.ToString()) for $($duration_sec) sec" #65 (here on eye) is the margin for one char locked, here - 5 left
 		#this kind of control doesn't support non printing chars (tab)	
 		$this.LockedForm.Refresh() #to show the last operation.text
 		
 		#DataTable
 		#datatable columns name filling (10x stackoverflow)
+		#Write-Verbose "LUSERS IN CREATING DGRID: $($lusers_list[0] | Out-String)"
  		[System.Data.DataTable] $dataTable = 'GridData'
 		foreach ($column in $lusers_list[0].psobject.properties.name) {
 			[void] $dataTable.Columns.Add($column)
@@ -564,6 +596,30 @@ class LockedGui {
 		Write-Verbose "$(date) the Timer enabled set to $($this.LTimer.Enabled)"
 		Write-Verbose "***$(date) end of AutoRChBoxCheckedChanged function ***"
 	} #/autorefresh checkbox checkedchanged
+
+	#show lock caller checkbox checkedchanged event handler
+	[Void] ShowLCallerChBoxCheckedChanged($sender, $eventargs) {
+		Write-Verbose "***$(date) entered in ShowLCallerChBoxCheckedChanged function ***"
+		Write-Verbose "$(date) sender: $($sender)"
+		Write-Verbose "$(date) eventargs: $($eventargs)"
+		Write-Verbose "$(date) sender checked: $($sender.Checked)"
+		If ($sender.Checked) {
+			$this.setshowlcaller_fun.Invoke($true) #setting show the lock caller
+			$this.LTimer.Interval = ([int32] $this.ShCallerLTimerPeriod) * 1000 #the default period for the show caller variant <120s> (default by now)
+			$this.SecondsText.Text = $this.ShCallerLTimerPeriod
+			Write-Verbose "$(date) the LTimer Interval was set to $($this.ShCallerLTimerPeriod) seconds in ShowLCallerChBoxCheckedChanged"
+		} Else {
+             $this.setshowlcaller_fun.Invoke($false) #unsetting show the lock caller
+			 $this.LTimer.Interval = ([int32] $this.NoShCallerLTimerPeriod) * 1000 #the default period for the no show caller variant <60s> (not default by now)
+			 $this.SecondsText.Text = $this.NoShCallerLTimerPeriod
+			 Write-Verbose "$(date) the LTimer Interval was set to $($this.ShCallerLTimerPeriod) seconds in ShowLCallerChBoxCheckedChanged"
+		} #if sender checked
+
+		if ($this.AutoRefreshChBox.Checked) {$this.RefreshGrid($true)} #EnforcedByUI (checkbox) #finally
+
+		Write-Verbose "$(date) showing the lock caller property was set"
+		Write-Verbose "***$(date) end of ShowLCallerChBoxCheckedChanged function ***"
+	} #/show lock caller checkbox checkedchanged
 	
 	#event hanfler to permit only digits and backspace (10x cgpt)
 	#autorefresh KeyPress event handler (it is fired on any single key press)

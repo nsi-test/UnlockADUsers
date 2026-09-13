@@ -30,14 +30,48 @@ class UsersUnlocker {
 	#getting and returning the locked users function
 	[System.Object[]] GetLUsers() {
 		Write-Verbose "`r`nStart of GetLUsers() - worker"
-		$CurrentLUsers = @($(Get-ADUser -Filter * -Properties SamAccountname, badPwdCount, badPasswordTime, lockedout, enabled | Where-Object {$_.lockedout -eq "True"} | % {
-			New-Object PSObject -Property @{
-			username = $_.SamAccountname
-			badPwdCount = $_.badPwdCount
-			badPasswordTime = [DateTime]::FromFileTime($_.badPasswordTime)
-			enabled = $_.enabled
+		$rootDse = $null
+		$searchRoot = $null
+		$searcher = $null
+		$results = $null
+		$CurrentLUsers = @()
+		try {
+			# Bind with the current Windows credentials to the default domain.
+			$rootDse = [System.DirectoryServices.DirectoryEntry]::new('LDAP://RootDSE')
+			$domainDn = [string]$rootDse.Properties['defaultNamingContext'][0]
+			if ([string]::IsNullOrEmpty($domainDn)) {
+				throw 'Unable to determine the Active Directory default naming context.'
 			}
-		} | Sort-Object -Property badPasswordTime)) #an array
+			$searchRoot = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domainDn")
+			$searcher = [System.DirectoryServices.DirectorySearcher]::new($searchRoot)
+			$searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+			$searcher.PageSize = 1000
+			$searcher.Filter = '(&(objectCategory=person)(objectClass=user)(lockoutTime>=1))'
+			$searcher.PropertiesToLoad.AddRange([string[]]@(
+				'sAMAccountName', 'badPwdCount', 'badPasswordTime',
+				'userAccountControl', 'msDS-User-Account-Control-Computed'
+			))
+			$results = $searcher.FindAll()
+			$CurrentLUsers = @(@(foreach ($result in $results) {
+				$properties = $result.Properties
+				# A nonzero lockoutTime can remain after a lockout expires.
+				# Use the computed UF_LOCKOUT bit to identify current lockouts.
+				if (([int]$properties['msDS-User-Account-Control-Computed'][0] -band 0x10) -ne 0) {
+					New-Object PSObject -Property @{
+						username = [string]$properties['samaccountname'][0]
+						badPwdCount = [int]$properties['badpwdcount'][0]
+						badPasswordTime = [DateTime]::FromFileTime([long]$properties['badpasswordtime'][0])
+						enabled = (([int]$properties['useraccountcontrol'][0] -band 0x2) -eq 0)
+					}
+				}
+			}) | Sort-Object -Property badPasswordTime)
+		}
+		finally {
+			if ($null -ne $results) { $results.Dispose() }
+			if ($null -ne $searcher) { $searcher.Dispose() }
+			if ($null -ne $searchRoot) { $searchRoot.Dispose() }
+			if ($null -ne $rootDse) { $rootDse.Dispose() }
+		}
 		
 		
 	
@@ -87,10 +121,53 @@ class UsersUnlocker {
 		Write-Verbose "End of GetLUsers() - worker"
 	} #GetUsers function
 	
+	# Escape values used in LDAP filters (RFC 4515).
+	static [string] EscapeLdapFilterValue([string] $value) {
+		return $value.Replace('\', '\5c').Replace('*', '\2a').Replace('(', '\28').Replace(')', '\29').Replace([string][char]0, '\00')
+	}
+
+	[void] UnlockUser([string] $username) {
+		if ([string]::IsNullOrWhiteSpace($username)) {
+			throw 'A user name is required to unlock an account.'
+		}
+		$rootDse = $null
+		$searchRoot = $null
+		$searcher = $null
+		$results = $null
+		$userEntry = $null
+		try {
+			$rootDse = [System.DirectoryServices.DirectoryEntry]::new('LDAP://RootDSE')
+			$domainDn = [string]$rootDse.Properties['defaultNamingContext'][0]
+			if ([string]::IsNullOrEmpty($domainDn)) {
+				throw 'Unable to determine the Active Directory default naming context.'
+			}
+			$searchRoot = [System.DirectoryServices.DirectoryEntry]::new("LDAP://$domainDn")
+			$searcher = [System.DirectoryServices.DirectorySearcher]::new($searchRoot)
+			$searcher.SearchScope = [System.DirectoryServices.SearchScope]::Subtree
+			$escapedUsername = [UsersUnlocker]::EscapeLdapFilterValue($username)
+			$searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$escapedUsername))"
+			$searcher.SizeLimit = 2
+			[void]$searcher.PropertiesToLoad.Add('distinguishedName')
+			$results = $searcher.FindAll()
+			if ($results.Count -ne 1) {
+				throw "Expected one AD user matching '$username'; found $($results.Count)."
+			}
+			$userEntry = $results[0].GetDirectoryEntry()
+			$userEntry.Properties['lockoutTime'].Value = 0
+			$userEntry.CommitChanges()
+		}
+		finally {
+			if ($null -ne $userEntry) { $userEntry.Dispose() }
+			if ($null -ne $results) { $results.Dispose() }
+			if ($null -ne $searcher) { $searcher.Dispose() }
+			if ($null -ne $searchRoot) { $searchRoot.Dispose() }
+			if ($null -ne $rootDse) { $rootDse.Dispose() }
+		}
+	}
+
 	#unlocking the locked users given as parameter function
 	[System.Object] UnlockLUsers([System.Object[]] $UserData, [bool] $enabledonly) {
 		Write-Verbose "in UnlockLUsers, UserUnlocker: $UserData"
-		Write-Verbose "$($UserData.gettype())"
 		
 		if (! $UserData) {
 			return @{"message" = "No locked users to unlock.`r`nCheck again later."; "unlockednum" = 0}
@@ -115,23 +192,17 @@ class UsersUnlocker {
 			$msg = ""
 		
 			$username = $_.username
-			$global:error.clear() #error variable is global
 			Try {	
-				Unlock-ADAccount -Identity $_.username
+				$this.UnlockUser($username)
+				"$username unlocked" | Tee-Object -variable msg | Write-Verbose
+				$message += "$msg`r`n"
+				$unlockednum += 1
 			}
 			Catch {
-				"unlockling $username error: $($global:error.Exception.Message)" | Tee-Object -variable msg | Write-Verbose
+				"unlocking $username error: $($_.Exception.Message)" | Tee-Object -variable msg | Write-Verbose
 				$message += "$msg`r`n"
 				$msg = ""
 			}
-			Finally {
-				If (! $global:error) {
-					"$($_.username) unlocked" | Tee-Object -variable msg | Write-Verbose
-					$message += "$msg`r`n"
-					$msg = ""
-					$unlockednum += 1
-				} #if error
-			} #finally	
 			
 		} # %
 		

@@ -1,5 +1,6 @@
 Microsoft/
 separ/
+tests/
 *.txt
 *.config
 *.exe

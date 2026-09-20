@@ -697,7 +697,8 @@ class LockedGui {
 	
 	#showing the main form function (it is called by the Run() function of worker)
 	[void] Show() {
-			[void]$this.LockedForm.ShowDialog()
+			#[void]$this.LockedForm.ShowDialog() #I think below is better
+			[System.Windows.Forms.Application]::Run($this.LockedForm)
 	}#/Show main form fn
 	
 	
